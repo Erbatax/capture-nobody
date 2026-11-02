@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#111214" />
+    <meta name="description" content="Rend les personnes transparentes sur vos photos. Tout reste sur le téléphone." />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Nobody" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <title>Capture Nobody</title>
+  </head>
+  <body>
+    <header class="top">
+      <h1>Capture Nobody</h1>
+      <p class="tagline">Les personnes deviennent transparentes. Rien ne quitte ce téléphone.</p>
+    </header>
+
+    <main class="app">
+      <section id="engine" class="panel" aria-live="polite">
+        <div class="row">
+          <span id="engine-label">Chargement des modèles…</span>
+          <span id="engine-detail" class="muted"></span>
+        </div>
+        <progress id="engine-progress" max="1" value="0"></progress>
+      </section>
+
+      <section id="error" class="panel error" role="alert" hidden></section>
+
+      <section class="pick">
+        <label class="button primary" id="pick-label">
+          <input id="pick" type="file" accept="image/*" disabled />
+          Choisir une photo
+        </label>
+        <label class="button" id="camera-label">
+          <input id="camera" type="file" accept="image/*" capture="environment" disabled />
+          Prendre une photo
+        </label>
+      </section>
+
+      <section id="work" class="panel" hidden aria-live="polite">
+        <div class="row"><span id="work-label">Analyse…</span><span id="work-detail" class="muted"></span></div>
+        <progress id="work-progress" max="1" value="0"></progress>
+      </section>
+
+      <section id="preview" hidden>
+        <div class="toolbar">
+          <div class="segmented" role="group" aria-label="Vue">
+            <button type="button" data-view="result" aria-pressed="true">Résultat</button>
+            <button type="button" data-view="overlay" aria-pressed="false">Original + zones</button>
+          </div>
+          <div class="zoom" role="group" aria-label="Zoom">
+            <button type="button" id="zoom-out" aria-label="Dézoomer">−</button>
+            <output id="zoom-value">1×</output>
+            <button type="button" id="zoom-in" aria-label="Zoomer">+</button>
+          </div>
+        </div>
+        <div id="viewport" class="viewport checker">
+          <canvas id="canvas"></canvas>
+        </div>
+        <p id="info" class="muted small"></p>
+
+        <details class="panel settings">
+          <summary>Réglages</summary>
+          <label>Sources
+            <select id="mode">
+              <option value="union" selected>Union (segmentation + détection)</option>
+              <option value="segmentation">Segmentation seule</option>
+              <option value="detection">Détection seule</option>
+            </select>
+          </label>
+          <label>Seuil de confiance <output id="threshold-value"></output>
+            <input id="threshold" type="range" min="0.05" max="0.9" step="0.05" />
+          </label>
+          <label>Marge autour des personnes <output id="dilation-value"></output>
+            <input id="dilation" type="range" min="0" max="0.05" step="0.0025" />
+          </label>
+        </details>
+
+        <div id="export" class="export" hidden>
+          <button type="button" id="share" class="button primary">Enregistrer / partager</button>
+          <a id="download" class="button" download>Télécharger le PNG</a>
+        </div>
+      </section>
+
+      <footer class="foot muted small">
+        <a href="/eval">Page d'évaluation</a> · aucune analytique, aucun envoi réseau
+      </footer>
+    </main>
+    <script type="module" src="/src/ui/main.ts"></script>
+  </body>
+</html>

@@ -21,9 +21,10 @@
   },
   "homepage": "https://github.com/Erbatax/capture-nobody#readme",
   "dependencies": {
-    "@mediapipe/tasks-vision": "^1.2.0"
+    "@mediapipe/tasks-vision": "1.2.0"
   },
   "devDependencies": {
+    "@types/node": "^26.6.6",
     "typescript": "^7.0.2",
     "vite": "^8.3.5",
     "vite-plugin-pwa": "^2.0.0",
