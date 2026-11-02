@@ -18,3 +18,12 @@ describe("Content-Security-Policy", () => {
     for (const h of headers) expect(h).toBe(`${CSP}; frame-ancestors 'none'`);
   });
 });
+
+describe("nginx", () => {
+  it("ne redéfinit pas la table des types MIME (sinon le HTML est téléchargé)", () => {
+    const conf = readFileSync(new URL("../deploy/nginx.conf", import.meta.url), "utf8");
+    const code = conf.split("\n").filter((l) => !l.trim().startsWith("#")).join("\n");
+    expect(code).not.toMatch(/\btypes\s*\{/);
+    expect(code).toMatch(/location = \/manifest\.webmanifest \{[^}]*default_type application\/manifest\+json/);
+  });
+});
