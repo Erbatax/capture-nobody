@@ -1,0 +1,8 @@
+node_modules/
+dist/
+dev-dist/
+public/models/
+public/wasm/
+*.log
+.DS_Store
+test-results/
