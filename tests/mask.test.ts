@@ -125,9 +125,11 @@ describe("buildMask", () => {
 
   it("respecte les seuils", () => {
     const det = detections(W, H, { boxes: [{ x: 0, y: 0, width: 10, height: 10, score: 0.2 }] });
-    expect(count(buildMask(det, { threshold: 0.3, dilation: 0 }))).toBe(0);
-    expect(count(buildMask(det, { threshold: 0.1, dilation: 0 }))).toBe(100);
-    expect(count(buildMask(det, { threshold: 0.5, boxThreshold: 0.15, dilation: 0 }))).toBe(100);
+    expect(count(buildMask(det, { dilation: 0 }))).toBe(0); // défaut 0,5
+    expect(count(buildMask(det, { boxThreshold: 0.3, dilation: 0 }))).toBe(0);
+    expect(count(buildMask(det, { boxThreshold: 0.15, dilation: 0 }))).toBe(100);
+    // le seuil de segmentation n'agit pas sur les boîtes
+    expect(count(buildMask(det, { threshold: 0.05, dilation: 0 }))).toBe(0);
   });
 
   it("arrondit les boîtes vers l'extérieur et les borne à l'image", () => {

@@ -4,16 +4,24 @@ import type { ProbMap } from "../src/core/types";
 
 describe("planTiles", () => {
   it("petite image : image entière seulement", () => {
-    expect(planTiles(800, 600)).toEqual([{ x: 0, y: 0, width: 800, height: 600 }]);
+    expect(planTiles(600, 400)).toEqual([{ x: 0, y: 0, width: 600, height: 400 }]);
   });
 
-  it("photo 12 Mpx : image entière + grille 3×2 qui couvre tout avec chevauchement", () => {
+  it("grille automatique selon le grand côté et la précision", () => {
+    expect(autoGrid(600, 400)).toBe(1);
+    expect(autoGrid(900, 600)).toBe(2);
+    expect(autoGrid(1523, 1011)).toBe(3);
+    expect(autoGrid(4032, 3024)).toBe(4);
+    expect(autoGrid(600, 400, "high")).toBe(2);
+    expect(autoGrid(4032, 3024, "high")).toBe(5);
+  });
+
+  it("photo 12 Mpx : image entière + grille 4×3 qui couvre tout avec chevauchement", () => {
     const W = 4032, H = 3024;
-    expect(autoGrid(W, H)).toBe(3);
     const rects = planTiles(W, H);
     expect(rects[0]).toEqual({ x: 0, y: 0, width: W, height: H });
     const tiles = rects.slice(1);
-    expect(tiles.length).toBe(3 * 2);
+    expect(tiles.length).toBe(4 * 3);
     // couverture complète
     for (const [px, py] of [[0, 0], [W - 1, H - 1], [W / 2, H / 2], [1500, 1600]]) {
       expect(tiles.some((t) => px >= t.x && px < t.x + t.width && py >= t.y && py < t.y + t.height)).toBe(true);
@@ -30,7 +38,7 @@ describe("planTiles", () => {
   });
 
   it("portrait : la grille suit le grand côté", () => {
-    const tiles = planTiles(3024, 4032).slice(1);
+    const tiles = planTiles(3024, 4032, { grid: 3 }).slice(1);
     const xs = new Set(tiles.map((t) => t.x));
     const ys = new Set(tiles.map((t) => t.y));
     expect(xs.size).toBe(2);

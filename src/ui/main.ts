@@ -8,29 +8,49 @@ import {
   maskCoverage,
   DEFAULT_DILATION,
   DEFAULT_THRESHOLD,
+  DEFAULT_BOX_THRESHOLD,
   type Detections,
   type LoadedImage,
   type Mask,
   type MaskMode,
   type Models,
+  type Precision,
 } from "../core";
 import { $, errorMessage, fmtMb, fmtMs, getModels, renderOverlay, store } from "./shared";
 
 type View = "result" | "overlay";
 interface Settings {
   mode: MaskMode;
+  /** Seuil de la détection (curseur principal). */
+  boxThreshold: number;
+  /** Seuil de la segmentation. */
   threshold: number;
   dilation: number;
+  precision: Precision;
+}
+/** Durées de chaque étape, en ms, pour la dernière photo. */
+interface StageTimes {
+  read: number;
+  segmentation: number;
+  detection: number;
+  mask: number;
+  preview: number;
+  png: number;
+  /** Du choix de la photo au bouton d'export (temps réel ressenti). */
+  total: number;
 }
 interface Current {
   loaded: LoadedImage;
   det: Detections;
   mask: Mask;
   result: ImageData;
+  times: StageTimes;
+  /** Instant où l'utilisateur a choisi la photo (ou relancé l'analyse). */
+  startedAt: number;
 }
 
 const ZOOMS = [1, 2, 4, 8];
-const SETTINGS_KEY = "nobody.settings.v1";
+const SETTINGS_KEY = "nobody.settings.v2";
 
 const el = {
   engine: $("engine"),
@@ -52,8 +72,12 @@ const el = {
   zoomOut: $("zoom-out") as HTMLButtonElement,
   zoomValue: $("zoom-value"),
   mode: $("mode") as HTMLSelectElement,
+  boxThreshold: $("box-threshold") as HTMLInputElement,
+  boxThresholdValue: $("box-threshold-value"),
   threshold: $("threshold") as HTMLInputElement,
   thresholdValue: $("threshold-value"),
+  precision: $("precision") as HTMLSelectElement,
+  timing: $("timing"),
   dilation: $("dilation") as HTMLInputElement,
   dilationValue: $("dilation-value"),
   exportBox: $("export"),
@@ -71,8 +95,10 @@ let exportFile: File | null = null;
 let exportUrl: string | null = null;
 const settings: Settings = {
   mode: "union",
+  boxThreshold: DEFAULT_BOX_THRESHOLD,
   threshold: DEFAULT_THRESHOLD,
   dilation: DEFAULT_DILATION,
+  precision: "normal",
   ...store.get<Partial<Settings>>(SETTINGS_KEY, {}),
 };
 
@@ -152,19 +178,11 @@ async function handleFile(file: File | undefined): Promise<void> {
   el.workDetail.textContent = "";
   el.workProgress.removeAttribute("value");
   try {
+    const startedAt = performance.now();
     const loaded = await loadImage(file);
+    const read = performance.now() - startedAt;
     if (gen !== generation) return;
-    el.workLabel.textContent = "Recherche des personnes…";
-    const det = await detectPeople(models, loaded.image, {
-      onProgress: (done, total) => {
-        el.workProgress.max = total;
-        el.workProgress.value = done;
-        el.workDetail.textContent = `passe ${done} / ${total}`;
-      },
-    });
-    if (gen !== generation) return;
-    current = { loaded, det, mask: null as unknown as Mask, result: null as unknown as ImageData };
-    await rebuild();
+    await analyse(loaded, gen, startedAt, read);
   } catch (err) {
     current = null;
     el.preview.hidden = true;
@@ -177,23 +195,95 @@ async function handleFile(file: File | undefined): Promise<void> {
   }
 }
 
+/** Lance les modèles sur une photo déjà chargée, puis construit le résultat. */
+async function analyse(loaded: LoadedImage, gen: number, startedAt: number, read: number): Promise<void> {
+  if (!models) throw new Error("Les modèles ne sont pas chargés.");
+  el.workLabel.textContent = "Recherche des personnes…";
+  const det = await detectPeople(models, loaded.image, {
+    precision: settings.precision,
+    onProgress: (done, total) => {
+      el.workProgress.max = total;
+      el.workProgress.value = done;
+      el.workDetail.textContent = `passe ${done} / ${total}`;
+    },
+  });
+  if (gen !== generation) return;
+  current = {
+    loaded,
+    det,
+    mask: null as unknown as Mask,
+    result: null as unknown as ImageData,
+    times: {
+      read,
+      segmentation: det.timings.segmentationMs,
+      detection: det.timings.detectionMs,
+      mask: 0,
+      preview: 0,
+      png: 0,
+      total: 0,
+    },
+    startedAt,
+  };
+  await rebuild();
+}
+
+/** Relance les modèles sur la photo courante (après un changement de précision). */
+async function reanalyse(): Promise<void> {
+  if (!current || !models) return;
+  const { loaded } = current;
+  const gen = ++generation;
+  clearError();
+  clearExport();
+  setInputsEnabled(false);
+  el.precision.disabled = true;
+  el.work.hidden = false;
+  el.workProgress.removeAttribute("value");
+  try {
+    await analyse(loaded, gen, performance.now(), 0);
+  } catch (err) {
+    current = null;
+    el.preview.hidden = true;
+    showError(`Échec du traitement : ${errorMessage(err)}. Aucun export n'est possible pour cette photo.`);
+  } finally {
+    if (gen === generation) {
+      el.work.hidden = true;
+      el.precision.disabled = false;
+      setInputsEnabled(!!models);
+    }
+  }
+}
+
 /** Recalcule masque + résultat avec les réglages courants, puis l'aperçu, puis l'export. */
 async function rebuild(): Promise<void> {
   if (!current) return;
   const gen = ++buildGeneration;
   clearExport();
-  const { loaded, det } = current;
+  const cur = current;
+  const { loaded, det, times } = cur;
+  // Un réglage modifié après coup : on mesure à partir de maintenant.
+  if (times.total) {
+    cur.startedAt = performance.now();
+    times.read = times.segmentation = times.detection = 0;
+  }
+  let t = performance.now();
   const mask = buildMask(det, settings);
   const result = applyMask(loaded.image, mask);
-  current.mask = mask;
-  current.result = result;
+  cur.mask = mask;
+  cur.result = result;
+  times.mask = performance.now() - t;
+  t = performance.now();
   render();
   el.preview.hidden = false;
   updateInfo();
+  await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0))); // laisse l'aperçu s'afficher
+  times.preview = performance.now() - t;
 
   // L'export n'apparaît qu'une fois l'aperçu affiché.
+  t = performance.now();
   const blob = await encodePng(result);
-  if (gen !== buildGeneration || !current) return;
+  if (gen !== buildGeneration || current !== cur) return;
+  times.png = performance.now() - t;
+  times.total = performance.now() - cur.startedAt;
   const stamp = new Date().toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 15);
   exportFile = new File([blob], `nobody-${stamp}.png`, { type: "image/png" });
   exportUrl = URL.createObjectURL(blob);
@@ -204,6 +294,23 @@ async function rebuild(): Promise<void> {
   el.download.classList.toggle("primary", !canShare);
   el.exportBox.hidden = false;
   el.info.textContent += ` · PNG ${fmtMb(blob.size)}`;
+  updateTiming();
+}
+
+function updateTiming(): void {
+  if (!current) return;
+  const t = current.times;
+  const steps: Array<[string, number]> = [
+    ["lecture", t.read],
+    ["segmentation", t.segmentation],
+    ["détection", t.detection],
+    ["masque", t.mask],
+    ["aperçu", t.preview],
+    ["PNG", t.png],
+  ];
+  el.timing.textContent =
+    `Temps total ${fmtMs(t.total)} — ` +
+    steps.filter(([, ms]) => ms > 0).map(([name, ms]) => `${name} ${fmtMs(ms)}`).join(" · ");
 }
 
 function render(): void {
@@ -232,10 +339,10 @@ function updateInfo(): void {
     loaded.downscaled ? `réduite depuis ${loaded.originalWidth}×${loaded.originalHeight} (limite des navigateurs mobiles)` : "",
     loaded.mimeType || "type inconnu",
     `${(maskCoverage(mask) * 100).toFixed(1)} % effacé`,
-    `${det.boxes.filter((b) => b.score >= settings.threshold).length} boîtes`,
+    `${det.boxes.filter((b) => b.score >= settings.boxThreshold).length} boîtes`,
     `${det.timings.passes} passes`,
-    fmtMs(det.timings.totalMs),
   ];
+  el.timing.textContent = "";
   el.info.textContent = parts.filter(Boolean).join(" · ");
 }
 
@@ -249,8 +356,11 @@ function applyZoom(): void {
 
 function syncSettingsUi(): void {
   el.mode.value = settings.mode;
+  el.boxThreshold.value = String(settings.boxThreshold);
   el.threshold.value = String(settings.threshold);
   el.dilation.value = String(settings.dilation);
+  el.precision.value = settings.precision;
+  el.boxThresholdValue.textContent = settings.boxThreshold.toFixed(2);
   el.thresholdValue.textContent = settings.threshold.toFixed(2);
   el.dilationValue.textContent = `${(settings.dilation * 100).toFixed(2)} % du petit côté`;
 }
@@ -258,6 +368,7 @@ function syncSettingsUi(): void {
 let rebuildTimer: number | undefined;
 function onSettingsChange(): void {
   settings.mode = el.mode.value as MaskMode;
+  settings.boxThreshold = Number(el.boxThreshold.value);
   settings.threshold = Number(el.threshold.value);
   settings.dilation = Number(el.dilation.value);
   store.set(SETTINGS_KEY, settings);
@@ -294,6 +405,12 @@ el.zoomOut.addEventListener("click", () => {
 });
 el.mode.addEventListener("change", onSettingsChange);
 el.threshold.addEventListener("input", onSettingsChange);
+el.boxThreshold.addEventListener("input", onSettingsChange);
+el.precision.addEventListener("change", () => {
+  settings.precision = el.precision.value as Precision;
+  store.set(SETTINGS_KEY, settings);
+  void reanalyse();
+});
 el.dilation.addEventListener("input", onSettingsChange);
 el.share.addEventListener("click", async () => {
   if (!exportFile) return;

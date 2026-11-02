@@ -22,10 +22,10 @@ Le service worker ne fonctionne qu'en HTTPS ou sur `localhost`.
 
 1. **Entrée** : « Choisir une photo » (galerie) ou « Prendre une photo » (`capture="environment"`).
 2. **Chargement** : `createImageBitmap(file, { imageOrientation: "from-image" })`, avec repli sur `<img>`. Au-delà de 16 Mpx (limite des canvas sur iOS), la photo est réduite et l'app l'indique.
-3. **Détection**, sur l'image entière puis sur une grille de tuiles qui se chevauchent de 20 % (2×2 au-delà de 1200 px, 3×2 au-delà de 2600 px) :
+3. **Détection**, sur l'image entière puis sur une grille de tuiles qui se chevauchent de 20 %. Le nombre de tuiles sur le grand côté dépend de sa taille : 1 sous 700 px, 2 sous 1000 px, 3 sous 2500 px, 4 au-delà. La précision **élevée** ajoute un rang de tuiles : plus lent, mais les petites personnes au loin sont mieux rattrapées.
    - **segmentation** DeepLabV3 (classe `person`, masque de confiance) ;
    - **détection** EfficientDet-Lite2 (classe `person`, boîtes, seuil interne 0,1).
-4. **Masque prudent** : union de la segmentation (seuillée) et des boîtes (seuillées), puis dilatation par un disque de rayon ≈ 1,5 % du plus petit côté. Les deux valeurs sont réglables.
+4. **Masque prudent** : union de la segmentation et des boîtes, chacune avec **son propre seuil** (0,5 par défaut pour les deux), puis dilatation par un disque de rayon ≈ 1,5 % du plus petit côté. Tout est réglable. Sur les photos de lieux testées, c'est la détection qui fait l'essentiel du travail : le curseur principal est donc son seuil.
 5. **Aperçu obligatoire** : résultat sur damier, ou original avec les zones effacées en rouge, zoom jusqu'à 8×. Le bouton d'export n'apparaît qu'une fois l'aperçu affiché.
 6. **Export** : PNG RGBA. Il ne contient que les chunks `IHDR`, `PLTE`, `tRNS`, `IDAT` et `IEND`, sans EXIF, GPS, profil ICC ni texte. Partage via `navigator.share({ files })` (sur iOS, « Enregistrer l'image » met la photo dans la galerie), avec un lien de téléchargement en repli.
 7. **Échec sécuritaire** : si un modèle ne se charge pas, ou si l'inférence plante, aucun bouton d'export n'est affiché et un message rouge explique pourquoi.
@@ -77,8 +77,8 @@ Seule la variante WASM **SIMD** est servie : Safari ≥ 16.4 et Chrome ≥ 91 la
 src/core/          librairie pure, sans interface, réutilisable telle quelle
   index.ts         API publique
   models.ts        loadModels({ modelBasePath, wasmBasePath, detector, delegate, onProgress })
-  detect.ts        detectPeople(models, image, { grid, overlap, onProgress }) → { segmentationMask, boxes, timings }
-  mask.ts          buildMask(detections, { threshold, boxThreshold, dilation, mode }) → Mask   (pur)
+  detect.ts        detectPeople(models, image, { grid, precision, overlap, onProgress }) → { segmentationMask, boxes, timings }
+  mask.ts          buildMask(detections, { boxThreshold, threshold, dilation, mode }) → Mask   (pur)
   tiling.ts        planTiles, compositeMax                                                    (pur)
   apply.ts         applyMask(image, mask) → ImageData (alpha = 0 et RVB = 0)
   encode.ts        encodePng(imageData) → Blob sans métadonnées
@@ -99,7 +99,8 @@ La dilatation utilise une transformée de distance euclidienne exacte (Felzenszw
 - Sélection d'un lot de photos, traitées une à une.
 - Pour chaque photo : l'original avec les zones en rouge (clic pour agrandir), les compteurs « personnes ratées » et « faux effacements gênants », le bouton ✓ « rien à signaler », et le temps de traitement.
 - **Mode** (union, segmentation seule, détection seule), seuil et marge : la grille se redessine sans relancer les modèles. Les compteurs sont **séparés par mode**. Le tableau « Comparaison des modes » donne les totaux de chacun.
-- Tuiles et détecteur (Lite2 ou Lite0) s'appliquent au prochain lot.
+- Tuiles (auto normal ou élevé, grille de 1 à 5) et détecteur (Lite2 ou Lite0) s'appliquent au prochain lot.
+- Temps par photo, détaillé en lecture, segmentation et détection (aussi dans le CSV).
 - Compteurs mémorisés dans `localStorage` (avec try/catch), export CSV : une ligne par photo et par mode.
 
 ## Déploiement sur Coolify
@@ -123,6 +124,8 @@ Le Dockerfile n'a pas pu être testé dans l'environnement de développement (pa
 | Installation iPhone et Android | Safari → Partager → Sur l'écran d'accueil ; Chrome → Installer | 📱 À faire |
 | HEIC sur iPhone | Le type reçu est affiché sous l'aperçu (`image/jpeg` attendu, iOS convertit) | 📱 À faire |
 | `/eval` sur 30 photos + CSV | | ✅ testé sur 4 photos |
+
+Sous l'aperçu, l'app affiche le **temps réel total** (du choix de la photo au bouton d'export), détaillé par étape : lecture, segmentation, détection, masque, aperçu, PNG.
 
 Les temps mesurés dans l'environnement de test (GPU émulé, 3 à 25 s par photo) ne sont **pas représentatifs** d'un téléphone : ce sont ceux de `/eval` sur l'appareil qui comptent.
 

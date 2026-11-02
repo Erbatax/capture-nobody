@@ -52,9 +52,9 @@ export interface Detections {
 export type MaskMode = "union" | "segmentation" | "detection";
 
 export interface BuildMaskOptions {
-  /** Seuil de probabilité pour la segmentation (défaut 0,25). */
+  /** Seuil de probabilité pour la segmentation (défaut 0,5). */
   threshold?: number;
-  /** Seuil de score pour les boîtes (défaut : même valeur que threshold). */
+  /** Seuil de score pour les boîtes de la détection (défaut 0,5). */
   boxThreshold?: number;
   /** Rayon de dilatation en fraction du plus petit côté (défaut 0,015). */
   dilation?: number;

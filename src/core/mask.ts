@@ -1,6 +1,9 @@
 import type { Box, BuildMaskOptions, Detections, Mask, ProbMap } from "./types";
 
-export const DEFAULT_THRESHOLD = 0.25;
+/** Seuil de la segmentation (probabilité par pixel). */
+export const DEFAULT_THRESHOLD = 0.5;
+/** Seuil de la détection (score des boîtes « person »). */
+export const DEFAULT_BOX_THRESHOLD = 0.5;
 export const DEFAULT_DILATION = 0.015;
 
 export function createMask(width: number, height: number): Mask {
@@ -161,7 +164,7 @@ export function dilationRadius(width: number, height: number, dilation: number):
  */
 export function buildMask(detections: Detections, options: BuildMaskOptions = {}): Mask {
   const threshold = options.threshold ?? DEFAULT_THRESHOLD;
-  const boxThreshold = options.boxThreshold ?? threshold;
+  const boxThreshold = options.boxThreshold ?? DEFAULT_BOX_THRESHOLD;
   const dilation = options.dilation ?? DEFAULT_DILATION;
   const mode = options.mode ?? "union";
   const { width, height } = detections;

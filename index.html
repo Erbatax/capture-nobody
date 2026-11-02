@@ -62,6 +62,7 @@
           <canvas id="canvas"></canvas>
         </div>
         <p id="info" class="muted small"></p>
+        <p id="timing" class="muted small"></p>
 
         <details class="panel settings">
           <summary>Réglages</summary>
@@ -72,7 +73,16 @@
               <option value="detection">Détection seule</option>
             </select>
           </label>
-          <label>Seuil de confiance <output id="threshold-value"></output>
+          <label>Précision
+            <select id="precision">
+              <option value="normal">Normale</option>
+              <option value="high">Élevée (plus lent, rattrape les petites personnes)</option>
+            </select>
+          </label>
+          <label>Seuil de détection <output id="box-threshold-value"></output>
+            <input id="box-threshold" type="range" min="0.05" max="0.9" step="0.05" />
+          </label>
+          <label>Seuil de segmentation <output id="threshold-value"></output>
             <input id="threshold" type="range" min="0.05" max="0.9" step="0.05" />
           </label>
           <label>Marge autour des personnes <output id="dilation-value"></output>

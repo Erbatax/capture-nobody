@@ -5,6 +5,7 @@ import {
   loadImage,
   DEFAULT_DILATION,
   DEFAULT_THRESHOLD,
+  DEFAULT_BOX_THRESHOLD,
   type Box,
   type Detections,
   type DetectorModel,
@@ -20,7 +21,7 @@ const MODE_LABEL: Record<MaskMode, string> = {
   detection: "Détection seule",
 };
 const STORE_KEY = "nobody.eval.v1";
-const SETTINGS_KEY = "nobody.eval.settings.v1";
+const SETTINGS_KEY = "nobody.eval.settings.v2";
 const THUMB_SIDE = 1600;
 const MAP_SIDE = 800;
 
@@ -36,7 +37,11 @@ interface PhotoRecord {
   detector: DetectorModel;
   tiles: string;
   passes: number;
+  /** Lecture + analyse (ms). */
   timeMs: number;
+  readMs?: number;
+  segmentationMs?: number;
+  detectionMs?: number;
   boxes: number;
   counts: Partial<Record<MaskMode, Count>>;
 }
@@ -45,6 +50,7 @@ interface EvalStore {
 }
 interface Settings {
   mode: MaskMode;
+  boxThreshold: number;
   threshold: number;
   dilation: number;
   tiles: string;
@@ -71,6 +77,8 @@ const el = {
   error: $("error"),
   files: $("files") as HTMLInputElement,
   mode: $("mode") as HTMLSelectElement,
+  boxThreshold: $("box-threshold") as HTMLInputElement,
+  boxThresholdValue: $("box-threshold-value"),
   threshold: $("threshold") as HTMLInputElement,
   thresholdValue: $("threshold-value"),
   dilation: $("dilation") as HTMLInputElement,
@@ -94,6 +102,7 @@ const el = {
 const data: EvalStore = store.get<EvalStore>(STORE_KEY, { photos: {} });
 const settings: Settings = {
   mode: "union",
+  boxThreshold: DEFAULT_BOX_THRESHOLD,
   threshold: DEFAULT_THRESHOLD,
   dilation: DEFAULT_DILATION,
   tiles: "auto",
@@ -151,16 +160,21 @@ async function processFiles(files: File[]): Promise<void> {
   el.workProgress.max = files.length;
   try {
     const models = await ensureModels(settings.detector);
-    const grid = settings.tiles === "auto" ? "auto" : Number(settings.tiles);
+    const auto = settings.tiles.startsWith("auto");
+    const grid = auto ? "auto" : Number(settings.tiles);
+    const precision = settings.tiles === "auto-high" ? "high" : "normal";
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       el.workLabel.textContent = `Photo ${i + 1} / ${files.length} — ${file.name}`;
       el.workProgress.value = i;
       const id = photoId(file);
       try {
+        const t0 = performance.now();
         const loaded = await loadImage(file);
+        const readMs = performance.now() - t0;
         const det = await detectPeople(models, loaded.image, {
           grid,
+          precision,
           segmentationMapSize: MAP_SIDE,
           onProgress: (d, t) => (el.workDetail.textContent = `passe ${d} / ${t}`),
         });
@@ -178,7 +192,10 @@ async function processFiles(files: File[]): Promise<void> {
           detector: settings.detector,
           tiles: settings.tiles,
           passes: det.timings.passes,
-          timeMs: Math.round(det.timings.totalMs),
+          timeMs: Math.round(readMs + det.timings.totalMs),
+          readMs: Math.round(readMs),
+          segmentationMs: Math.round(det.timings.segmentationMs),
+          detectionMs: Math.round(det.timings.detectionMs),
           boxes: det.boxes.length,
           counts: prev?.counts ?? {},
         };
@@ -280,7 +297,12 @@ function renderBody(item: Item): void {
   name.textContent = rec.name;
   const meta = document.createElement("div");
   meta.className = "muted small";
-  meta.textContent = `${rec.width}×${rec.height} · ${fmtMs(rec.timeMs)} · ${rec.passes} passes · ${rec.boxes} boîtes · ${rec.detector}`;
+  const split =
+    rec.segmentationMs !== undefined
+      ? ` (lecture ${fmtMs(rec.readMs ?? 0)}, segmentation ${fmtMs(rec.segmentationMs)}, détection ${fmtMs(rec.detectionMs ?? 0)})`
+      : "";
+  const kept = item.boxes.filter((b) => b.score >= settings.boxThreshold).length;
+  meta.textContent = `${rec.width}×${rec.height} · ${fmtMs(rec.timeMs)}${split} · ${rec.passes} passes · ${kept} boîtes retenues · ${rec.detector}`;
   const update = (patch: Partial<Count>) => {
     rec.counts[settings.mode] = { ...getCount(rec, settings.mode), ...patch, counted: true };
     save();
@@ -387,16 +409,18 @@ function csvCell(v: unknown): string {
 
 function exportCsv(): void {
   const header = [
-    "photo", "largeur", "hauteur", "detecteur", "tuiles", "passes", "temps_ms", "boites_brutes",
-    "mode", "comptee", "personnes_ratees", "faux_effacements", "seuil", "marge",
+    "photo", "largeur", "hauteur", "detecteur", "tuiles", "passes", "temps_ms", "lecture_ms",
+    "segmentation_ms", "detection_ms", "boites_brutes", "mode", "comptee", "personnes_ratees",
+    "faux_effacements", "seuil_detection", "seuil_segmentation", "marge",
   ];
   const rows = [header.join(",")];
   for (const r of Object.values(data.photos)) {
     for (const mode of MODES) {
       const c = getCount(r, mode);
       rows.push(
-        [r.name, r.width, r.height, r.detector, r.tiles, r.passes, r.timeMs, r.boxes, mode,
-          c.counted ? 1 : 0, c.missed, c.falseErase, settings.threshold, settings.dilation]
+        [r.name, r.width, r.height, r.detector, r.tiles, r.passes, r.timeMs, r.readMs ?? "",
+          r.segmentationMs ?? "", r.detectionMs ?? "", r.boxes, mode, c.counted ? 1 : 0, c.missed,
+          c.falseErase, settings.boxThreshold, settings.threshold, settings.dilation]
           .map(csvCell)
           .join(","),
       );
@@ -414,8 +438,10 @@ function exportCsv(): void {
 
 function syncSettingsUi(): void {
   el.mode.value = settings.mode;
+  el.boxThreshold.value = String(settings.boxThreshold);
   el.threshold.value = String(settings.threshold);
   el.dilation.value = String(settings.dilation);
+  el.boxThresholdValue.textContent = settings.boxThreshold.toFixed(2);
   el.tiles.value = settings.tiles;
   el.detector.value = settings.detector;
   el.thresholdValue.textContent = settings.threshold.toFixed(2);
@@ -424,6 +450,7 @@ function syncSettingsUi(): void {
 
 function readSettings(): void {
   settings.mode = el.mode.value as MaskMode;
+  settings.boxThreshold = Number(el.boxThreshold.value);
   settings.threshold = Number(el.threshold.value);
   settings.dilation = Number(el.dilation.value);
   settings.tiles = el.tiles.value;
@@ -437,7 +464,7 @@ el.files.addEventListener("change", () => {
   el.files.value = "";
   void processFiles(files);
 });
-for (const input of [el.mode, el.threshold, el.dilation]) {
+for (const input of [el.mode, el.boxThreshold, el.threshold, el.dilation]) {
   input.addEventListener("input", () => {
     readSettings();
     updateTotals();

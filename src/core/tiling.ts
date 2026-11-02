@@ -1,21 +1,24 @@
 import type { ProbMap, Rect } from "./types";
 
+export type Precision = "normal" | "high";
+
 export interface TileOptions {
   /**
    * Nombre de tuiles sur le grand côté. 1 = image entière seulement.
    * "auto" choisit selon la taille de l'image.
    */
   grid?: number | "auto";
+  /** Pour grid "auto" : "high" ajoute un rang de tuiles (plus lent, rattrape mieux les petites personnes). */
+  precision?: Precision;
   /** Chevauchement entre tuiles voisines, en fraction de la tuile (défaut 0,2). */
   overlap?: number;
 }
 
 /** Choix automatique de la grille selon le grand côté de l'image. */
-export function autoGrid(width: number, height: number): number {
+export function autoGrid(width: number, height: number, precision: Precision = "normal"): number {
   const long = Math.max(width, height);
-  if (long <= 1200) return 1;
-  if (long <= 2600) return 2;
-  return 3;
+  const base = long < 700 ? 1 : long < 1000 ? 2 : long < 2500 ? 3 : 4;
+  return precision === "high" ? Math.max(2, base + 1) : base;
 }
 
 function axisTiles(length: number, count: number, overlap: number): Array<[number, number]> {
@@ -37,7 +40,7 @@ function axisTiles(length: number, count: number, overlap: number): Array<[numbe
  */
 export function planTiles(width: number, height: number, options: TileOptions = {}): Rect[] {
   const overlap = options.overlap ?? 0.2;
-  const grid = options.grid === undefined || options.grid === "auto" ? autoGrid(width, height) : options.grid;
+  const grid = options.grid === undefined || options.grid === "auto" ? autoGrid(width, height, options.precision) : options.grid;
   const rects: Rect[] = [{ x: 0, y: 0, width, height }];
   if (grid <= 1) return rects;
   const landscape = width >= height;

@@ -33,7 +33,10 @@
             <option value="detection">Détection seule</option>
           </select>
         </label>
-        <label>Seuil <output id="threshold-value"></output>
+        <label>Seuil détection <output id="box-threshold-value"></output>
+          <input id="box-threshold" type="range" min="0.05" max="0.9" step="0.05" />
+        </label>
+        <label>Seuil segmentation <output id="threshold-value"></output>
           <input id="threshold" type="range" min="0.05" max="0.9" step="0.05" />
         </label>
         <label>Marge <output id="dilation-value"></output>
@@ -41,11 +44,13 @@
         </label>
         <label>Tuiles
           <select id="tiles">
-            <option value="auto">Auto (image entière + grille)</option>
+            <option value="auto">Auto, précision normale</option>
+            <option value="auto-high">Auto, précision élevée</option>
             <option value="1">Image entière seulement</option>
             <option value="2">Grille 2</option>
             <option value="3">Grille 3</option>
             <option value="4">Grille 4</option>
+            <option value="5">Grille 5</option>
           </select>
         </label>
         <label>Détecteur
