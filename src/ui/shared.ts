@@ -1,4 +1,50 @@
+import { registerSW } from "virtual:pwa-register";
 import { loadModels, type DetectorModel, type Mask, type Models } from "../core";
+
+declare const __APP_VERSION__: string;
+
+/**
+ * Service worker : précache pour le hors-ligne + bandeau quand une nouvelle
+ * version est prête. On ne recharge jamais tout seul (traitement en cours).
+ */
+export function setupApp(): void {
+  const version = document.getElementById("version");
+  if (version) version.textContent = `version ${__APP_VERSION__}`;
+  if (!("serviceWorker" in navigator)) return;
+  const updateSW = registerSW({
+    immediate: true,
+    onNeedRefresh() {
+      if (document.getElementById("update-banner")) return;
+      const banner = document.createElement("div");
+      banner.id = "update-banner";
+      banner.className = "update-banner";
+      banner.setAttribute("role", "status");
+      const text = document.createElement("span");
+      text.textContent = "Nouvelle version disponible.";
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "button primary";
+      btn.textContent = "Mettre à jour";
+      btn.addEventListener("click", () => {
+        btn.disabled = true;
+        void updateSW(true);
+      });
+      banner.append(text, btn);
+      document.body.append(banner);
+    },
+    onRegisteredSW(_url, reg) {
+      if (!reg) return;
+      // Vérifie les mises à jour au retour sur l'app et toutes les 30 min.
+      const check = () => {
+        if (navigator.onLine) reg.update().catch(() => {});
+      };
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") check();
+      });
+      setInterval(check, 30 * 60 * 1000);
+    },
+  });
+}
 
 const BASE = import.meta.env.BASE_URL;
 

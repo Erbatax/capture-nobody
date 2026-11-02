@@ -71,6 +71,10 @@ Seule la variante WASM **SIMD** est servie : Safari ≥ 16.4 et Chrome ≥ 91 la
 
 `vite-plugin-pwa` (Workbox, `generateSW`) précharge environ 29 Mo : l'app, le WASM, DeepLabV3 et Lite2. `maximumFileSizeToCacheInBytes` est relevé à 30 Mo, car Workbox ignore par défaut les fichiers de plus de 2 Mo. Lite0 n'est mis en cache qu'au premier usage, sur `/eval`.
 
+### Mises à jour
+
+Le service worker sert l'app depuis son cache, même en ligne. Après un déploiement, la nouvelle version se télécharge en arrière-plan. Un bandeau **« Nouvelle version disponible — Mettre à jour »** apparaît alors : l'app ne se recharge jamais d'elle-même, pour ne pas interrompre un traitement. Le numéro de version (commit et date du build) est affiché en bas de chaque page. Coolify le transmet via l'argument de build `SOURCE_COMMIT`.
+
 ## Architecture
 
 ```

@@ -1,6 +1,9 @@
 # Étape 1 : build (télécharge les modèles une fois, vérifie leurs SHA-256)
 FROM node:22-alpine AS build
 WORKDIR /app
+# Coolify transmet le commit déployé : il s'affiche en bas de page.
+ARG SOURCE_COMMIT=""
+ENV SOURCE_COMMIT=$SOURCE_COMMIT
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .

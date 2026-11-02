@@ -12,7 +12,7 @@ import {
   type MaskMode,
 } from "../core";
 import { fitWithin } from "../core/tiling";
-import { $, errorMessage, fmtMb, fmtMs, getModels, renderOverlay, store } from "./shared";
+import { $, errorMessage, setupApp, fmtMb, fmtMs, getModels, renderOverlay, store } from "./shared";
 
 const MODES: MaskMode[] = ["union", "segmentation", "detection"];
 const MODE_LABEL: Record<MaskMode, string> = {
@@ -492,3 +492,4 @@ updateTotals();
 ensureModels(settings.detector)
   .then(() => (el.files.disabled = false))
   .catch((err) => showError(`Les modèles n'ont pas pu être chargés : ${errorMessage(err)}`));
+setupApp();

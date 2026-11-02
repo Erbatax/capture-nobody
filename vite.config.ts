@@ -66,7 +66,13 @@ function stripMediapipeTelemetry(): Plugin {
   };
 }
 
+/** Identifiant de version affiché en bas de page : commit (fourni par Coolify) + date du build. */
+const BUILD_DATE = new Date().toISOString().slice(0, 16).replace("T", " ");
+const COMMIT = (process.env.SOURCE_COMMIT ?? "").slice(0, 7);
+const APP_VERSION = COMMIT ? `${COMMIT} · ${BUILD_DATE} UTC` : `${BUILD_DATE} UTC`;
+
 export default defineConfig({
+  define: { __APP_VERSION__: JSON.stringify(APP_VERSION) },
   // Pas de pré-bundle : la neutralisation de la télémétrie s'applique aussi en dev.
   optimizeDeps: { exclude: ["@mediapipe/tasks-vision"] },
   build: {
@@ -82,8 +88,10 @@ export default defineConfig({
     stripMediapipeTelemetry(),
     cspMeta(),
     VitePWA({
-      registerType: "autoUpdate",
-      injectRegister: "script",
+      // « prompt » : la nouvelle version attend que l'utilisateur la demande
+      // (bandeau « Nouvelle version »), pour ne jamais recharger en plein traitement.
+      registerType: "prompt",
+      injectRegister: false,
       manifest: {
         name: "Capture Nobody — effaceur de personnes",
         short_name: "Nobody",

@@ -16,7 +16,7 @@ import {
   type Models,
   type Precision,
 } from "../core";
-import { $, errorMessage, fmtMb, fmtMs, getModels, renderOverlay, store } from "./shared";
+import { $, errorMessage, setupApp, fmtMb, fmtMs, getModels, renderOverlay, store } from "./shared";
 
 type View = "result" | "overlay";
 interface Settings {
@@ -424,3 +424,4 @@ el.share.addEventListener("click", async () => {
 syncSettingsUi();
 applyZoom();
 void init();
+setupApp();
